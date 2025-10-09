@@ -35,7 +35,7 @@ export default function SecurityPage() {
 
   return (
     <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium bold text-gray-900 mb-6">
+      <h1 className="text-lg lg:text-2xl font-medium bold mb-6">
         Security Settings
       </h1>
       <Card className="mb-8">
@@ -117,16 +117,16 @@ export default function SecurityPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Delete Account</CardTitle>
+          <CardTitle>Account削除したい？</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500 mb-4">
-            Account deletion is non-reversable. Please proceed with caution.
+          <p className="text-sm text-muted-foreground mb-4">
+            削除したら復活できないので、ご注意ください。
           </p>
           <form action={deleteAction} className="space-y-4">
             <div>
               <Label htmlFor="delete-password" className="mb-2">
-                Confirm Password
+                Passwordを入力してね
               </Label>
               <Input
                 id="delete-password"
