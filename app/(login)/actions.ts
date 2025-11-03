@@ -60,7 +60,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
     .from(users)
     .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
     .leftJoin(teams, eq(teamMembers.teamId, teams.id))
-    .where(eq(users.email, email))
+    .where(sql`${users.email} = ${email}`)
     .limit(1);
 
   if (userWithTeam.length === 0) {
@@ -103,7 +103,7 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 const signUpSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  inviteId: z.string().optional()
+  inviteId: z.coerce.number().optional(),
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
@@ -112,7 +112,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const existingUser = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(sql`${users.email} = ${email}`)
     .limit(1);
 
   if (existingUser.length > 0) {
@@ -152,7 +152,7 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       .from(invitations)
       .where(
         and(
-          eq(invitations.id, parseInt(inviteId)),
+          eq(invitations.id, inviteId),
           eq(invitations.email, email),
           eq(invitations.status, 'pending')
         )

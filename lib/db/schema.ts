@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   integer,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -68,15 +69,104 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
+/**
+ * Articles table - stores blog posts and content
+ * Supports draft, published, and unpublished status
+ * Implements team-based access control for Row Level Security
+ */
+export const articles = pgTable('articles', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  content: text('content').notNull(),
+  excerpt: varchar('excerpt', { length: 500 }),
+  status: varchar('status', { length: 20 }).notNull().default('draft'),
+  authorId: integer('author_id')
+    .notNull()
+    .references(() => users.id),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  publishedAt: timestamp('published_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Categories table - hierarchical content categorization
+ */
+export const categories = pgTable('categories', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 100 }).notNull(),
+  slug: varchar('slug', { length: 100 }).notNull(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Tags table - flexible content tagging
+ */
+export const tags = pgTable('tags', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 50 }).notNull(),
+  slug: varchar('slug', { length: 50 }).notNull(),
+  teamId: integer('team_id')
+    .notNull()
+    .references(() => teams.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Article-Tag junction table - many-to-many relationship
+ */
+export const articleTags = pgTable(
+  'article_tags',
+  {
+    articleId: integer('article_id')
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    tagId: integer('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.articleId, table.tagId] }),
+  })
+);
+
+/**
+ * Article-Category junction table - many-to-many relationship
+ */
+export const articleCategories = pgTable(
+  'article_categories',
+  {
+    articleId: integer('article_id')
+      .notNull()
+      .references(() => articles.id, { onDelete: 'cascade' }),
+    categoryId: integer('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'cascade' }),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.articleId, table.categoryId] }),
+  })
+);
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
   invitations: many(invitations),
+  articles: many(articles),
+  categories: many(categories),
+  tags: many(tags),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
   teamMembers: many(teamMembers),
   invitationsSent: many(invitations),
+  articles: many(articles),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -112,6 +202,60 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
 }));
 
+export const articlesRelations = relations(articles, ({ one, many }) => ({
+  author: one(users, {
+    fields: [articles.authorId],
+    references: [users.id],
+  }),
+  team: one(teams, {
+    fields: [articles.teamId],
+    references: [teams.id],
+  }),
+  articleTags: many(articleTags),
+  articleCategories: many(articleCategories),
+}));
+
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  team: one(teams, {
+    fields: [categories.teamId],
+    references: [teams.id],
+  }),
+  articleCategories: many(articleCategories),
+}));
+
+export const tagsRelations = relations(tags, ({ one, many }) => ({
+  team: one(teams, {
+    fields: [tags.teamId],
+    references: [teams.id],
+  }),
+  articleTags: many(articleTags),
+}));
+
+export const articleTagsRelations = relations(articleTags, ({ one }) => ({
+  article: one(articles, {
+    fields: [articleTags.articleId],
+    references: [articles.id],
+  }),
+  tag: one(tags, {
+    fields: [articleTags.tagId],
+    references: [tags.id],
+  }),
+}));
+
+export const articleCategoriesRelations = relations(
+  articleCategories,
+  ({ one }) => ({
+    article: one(articles, {
+      fields: [articleCategories.articleId],
+      references: [articles.id],
+    }),
+    category: one(categories, {
+      fields: [articleCategories.categoryId],
+      references: [categories.id],
+    }),
+  })
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Team = typeof teams.$inferSelect;
@@ -122,6 +266,14 @@ export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
 export type Invitation = typeof invitations.$inferSelect;
 export type NewInvitation = typeof invitations.$inferInsert;
+export type Article = typeof articles.$inferSelect;
+export type NewArticle = typeof articles.$inferInsert;
+export type Category = typeof categories.$inferSelect;
+export type NewCategory = typeof categories.$inferInsert;
+export type Tag = typeof tags.$inferSelect;
+export type NewTag = typeof tags.$inferInsert;
+export type ArticleTag = typeof articleTags.$inferSelect;
+export type ArticleCategory = typeof articleCategories.$inferSelect;
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
     user: Pick<User, 'id' | 'name' | 'email'>;
@@ -139,4 +291,17 @@ export enum ActivityType {
   REMOVE_TEAM_MEMBER = 'REMOVE_TEAM_MEMBER',
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
+  CREATE_ARTICLE = 'CREATE_ARTICLE',
+  UPDATE_ARTICLE = 'UPDATE_ARTICLE',
+  DELETE_ARTICLE = 'DELETE_ARTICLE',
+  PUBLISH_ARTICLE = 'PUBLISH_ARTICLE',
+}
+
+/**
+ * Article status enum for type safety
+ */
+export enum ArticleStatus {
+  DRAFT = 'draft',
+  PUBLISHED = 'published',
+  UNPUBLISHED = 'unpublished',
 }
